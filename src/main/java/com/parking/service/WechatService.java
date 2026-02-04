@@ -25,6 +25,7 @@ public class WechatService {
     public String getOpenid(String code) {
         String url = String.format(CODE2SESSION_URL, wechatConfig.getAppid(), wechatConfig.getSecret(), code);
         try {
+            log.info("calling wechat code2session (using wechatRestTemplate)");
             String resp = wechatRestTemplate.getForObject(url, String.class);
             JSONObject obj = JSON.parseObject(resp);
             if (obj.containsKey("errcode") && obj.getIntValue("errcode") != 0) {
