@@ -27,8 +27,10 @@ public class ParkingSpotController {
             @RequestParam(required = false) Long communityId,
             @RequestParam(required = false) BigDecimal latitude,
             @RequestParam(required = false) BigDecimal longitude,
-            @RequestParam(required = false) BigDecimal maxDistance) {
-        List<Map<String, Object>> list = parkingSpotService.recommended(communityId, latitude, longitude, maxDistance);
+            @RequestParam(required = false) BigDecimal maxDistance,
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime) {
+        List<Map<String, Object>> list = parkingSpotService.recommended(communityId, latitude, longitude, maxDistance, startTime, endTime);
         return Result.ok(list);
     }
 

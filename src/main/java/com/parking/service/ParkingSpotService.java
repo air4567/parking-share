@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -23,6 +24,7 @@ public class ParkingSpotService {
     private final ParkingSpotMapper parkingSpotMapper;
     private final CommunityMapper communityMapper;
     private final UserMapper userMapper;
+    private final OrderService orderService;
 
     private static final Map<String, String> STATUS_TEXT = new HashMap<String, String>() {{
         put("available", "可用");
@@ -30,13 +32,33 @@ public class ParkingSpotService {
         put("reserved", "已预订");
     }};
 
-    public List<Map<String, Object>> recommended(Long communityId, BigDecimal lat, BigDecimal lng, BigDecimal maxDistance) {
+    /**
+     * 推荐车位。当 startTime/endTime 不为空时，仅返回在该时段内无「进行中」订单的车位。
+     */
+    public List<Map<String, Object>> recommended(Long communityId, BigDecimal lat, BigDecimal lng, BigDecimal maxDistance,
+                                                String startTimeStr, String endTimeStr) {
         LambdaQueryWrapper<ParkingSpot> q = new LambdaQueryWrapper<>();
-        q.eq(ParkingSpot::getStatus, "available");
+        if (startTimeStr == null || startTimeStr.trim().isEmpty() || endTimeStr == null || endTimeStr.trim().isEmpty()) {
+            q.eq(ParkingSpot::getStatus, "available");
+        } else {
+            q.in(ParkingSpot::getStatus, Arrays.asList("available", "reserved"));
+        }
         if (communityId != null) q.eq(ParkingSpot::getCommunityId, communityId);
         q.orderByAsc(ParkingSpot::getPricePerHour);
-        q.last("LIMIT 50");  // 增加限制，因为需要根据距离筛选
+        q.last("LIMIT 50");
         List<ParkingSpot> list = parkingSpotMapper.selectList(q);
+
+        if (startTimeStr != null && !startTimeStr.trim().isEmpty() && endTimeStr != null && !endTimeStr.trim().isEmpty()) {
+            try {
+                LocalDateTime start = LocalDateTime.parse(startTimeStr.trim().replace(" ", "T"));
+                LocalDateTime end = LocalDateTime.parse(endTimeStr.trim().replace(" ", "T"));
+                List<Long> occupiedSpotIds = orderService.findSpotIdsWithOverlappingOngoingOrder(start, end);
+                if (occupiedSpotIds != null && !occupiedSpotIds.isEmpty()) {
+                    list = list.stream().filter(s -> !occupiedSpotIds.contains(s.getId())).collect(Collectors.toList());
+                }
+            } catch (Exception ignored) { }
+        }
+
         return toDtoList(list, lat, lng, maxDistance);
     }
 

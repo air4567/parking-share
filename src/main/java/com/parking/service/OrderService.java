@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -36,10 +37,35 @@ public class OrderService {
         put("cancelled", "已取消");
     }};
 
+    /**
+     * 查询在 [start, end] 时段内存在「进行中」订单的车位 ID 列表（用于按时间段筛选可约车位）
+     */
+    public List<Long> findSpotIdsWithOverlappingOngoingOrder(LocalDateTime start, LocalDateTime end) {
+        LambdaQueryWrapper<Order> q = new LambdaQueryWrapper<>();
+        q.eq(Order::getStatus, "ongoing");
+        q.lt(Order::getStartTime, end);
+        q.gt(Order::getEndTime, start);
+        return orderMapper.selectList(q).stream()
+                .map(Order::getParkingSpotId)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 该车位在 [start, end] 是否已被「进行中」订单占用
+     */
+    public boolean hasOverlappingOngoingOrder(Long parkingSpotId, LocalDateTime start, LocalDateTime end) {
+        List<Long> occupied = findSpotIdsWithOverlappingOngoingOrder(start, end);
+        return occupied != null && occupied.contains(parkingSpotId);
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public Long create(Long userId, Long parkingSpotId, LocalDateTime startTime, LocalDateTime endTime) {
         ParkingSpot spot = parkingSpotMapper.selectById(parkingSpotId);
-        if (spot == null || !"available".equals(spot.getStatus())) return null;
+        if (spot == null) return null;
+        if (hasOverlappingOngoingOrder(parkingSpotId, startTime, endTime)) {
+            return null; // 该时间段已被预约，由 Controller 返回「该时间段不可用」
+        }
         int hours = (int) Math.ceil(java.time.Duration.between(startTime, endTime).toMinutes() / 60.0);
         if (hours <= 0) return null;
         BigDecimal total = spot.getPricePerHour().multiply(BigDecimal.valueOf(hours));

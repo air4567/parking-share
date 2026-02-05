@@ -29,7 +29,7 @@ public class OrderController {
         LocalDateTime startTime = LocalDateTime.parse(body.get("startTime").replace(" ", "T"));
         LocalDateTime endTime = LocalDateTime.parse(body.get("endTime").replace(" ", "T"));
         Long id = orderService.create(userId, parkingSpotId, startTime, endTime);
-        if (id == null) return Result.fail("预订失败");
+        if (id == null) return Result.fail(400, "该时间段不可用，请选择其他时间");
         return Result.ok(Collections.singletonMap("id", id));
     }
 
